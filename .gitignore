@@ -53,12 +53,10 @@ log/
 .DS_Store
 
 # Local development
-data/
 temp/
 tmp/
 
 # Docker
-.docker/
 docker-compose.override.yml
 
 # Test coverage
