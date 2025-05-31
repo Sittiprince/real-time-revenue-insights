@@ -1,0 +1,92 @@
+import sys
+sys.path.append('./src')
+
+from data_ingestion.postgres_connector import PostgreSQLConnector
+from data_ingestion.kafka_consumer import FXRateConsumer
+from data_processing.currency_converter import CurrencyConverter
+import time
+
+def test_full_pipeline():
+    """Test the complete pipeline integration"""
+    print("🧪 Testing Full Pipeline Integration")
+    print("=" * 50)
+    
+    # 1. Test PostgreSQL
+    print("\n1️⃣  Testing PostgreSQL Connection...")
+    pg_connector = PostgreSQLConnector()
+    
+    try:
+        summary = pg_connector.get_transaction_summary()
+        print(f"✅ PostgreSQL: {summary['total_transactions']} transactions loaded")
+        
+        # Get recent transactions
+        recent = pg_connector.get_recent_transactions(hours=24)
+        print(f"✅ Recent transactions: {len(recent)} in last 24 hours")
+        
+    except Exception as e:
+        print(f"❌ PostgreSQL failed: {e}")
+        return False
+    
+    # 2. Test Currency Converter with default rates
+    print("\n2️⃣  Testing Currency Converter...")
+    converter = CurrencyConverter()
+    
+    # Use default rates from database
+    default_rates = {'EUR': 0.85,
+            'GBP': 0.73,
+            'CAD': 1.35,
+            'JPY': 110.0,
+            'AUD': 1.45,
+            'CHF': 0.92,
+            'SEK': 10.50,
+            'NOK': 10.80,
+            'CHF': 1.08}
+    converter.update_fx_rates(default_rates)
+    
+    # Convert recent transactions
+    if not recent.empty:
+        converted = converter.batch_convert_transactions(recent)
+        summary = converter.get_conversion_summary(converted)
+        print(f"✅ Converted {summary['total_transactions']} transactions")
+        print(f"✅ Total USD revenue: ${summary['total_usd_amount']:,.2f}")
+        
+        # Show sample conversions
+        print("\n📊 Sample conversions:")
+        sample = converted[['country', 'currency', 'amount', 'usd_amount']].head()
+        for _, row in sample.iterrows():
+            print(f"   {row['country']}: {row['amount']} {row['currency']} → ${row['usd_amount']:.2f} USD")
+    
+    # 3. Test Kafka Consumer (optional - needs producer running)
+    print("\n3️⃣  Testing Kafka Consumer...")
+    fx_consumer = FXRateConsumer()
+    
+    try:
+        fx_consumer.start_consuming()
+        print("⏳ Waiting for FX rates (15 seconds)...")
+        time.sleep(15)
+        
+        rates = fx_consumer.get_latest_rates()
+        if len(rates) > 1:
+            print(f"✅ Kafka: Received rates for {len(rates)} currencies")
+            
+            # Update converter with live rates
+            converter.update_fx_rates(rates)
+            print("✅ Updated converter with live rates")
+        else:
+            print("⚠️  No live rates received (FX producer not running)")
+        
+        fx_consumer.stop_consuming()
+        
+    except Exception as e:
+        print(f"⚠️  Kafka test failed: {e} (this is OK if producer not running)")
+    
+    print("\n🎉 Pipeline Integration Test Complete!")
+    print("\nNext Steps:")
+    print("1. Start FX producer: python scripts/fx_producer.py")
+    print("2. Build Streamlit dashboard")
+    print("3. Set up real-time processing")
+    
+    return True
+
+if __name__ == "__main__":
+    test_full_pipeline()
