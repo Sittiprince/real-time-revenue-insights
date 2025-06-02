@@ -47,7 +47,7 @@ graph TD
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/real-time-revenue-insights.git
+git clone https://github.com/Sittiprince/real-time-revenue-insights.git
 cd real-time-revenue-insights
 ```
 
